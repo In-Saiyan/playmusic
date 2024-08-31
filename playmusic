@@ -20,6 +20,12 @@ INTERACTIVE=0
 
 # Help message
 show_help() {
+    echo " _   _ _____ _     ____  "
+    echo "| | | | ____| |   |  _ \ "
+    echo "| |_| |  _| | |   | |_) |"
+    echo "|  _  | |___| |___|  __/ "
+    echo "|_| |_|_____|_____|_|    "
+    echo "========================="
     echo "Usage: $0 [OPTIONS] [SEARCH_TERM or --link YT_LINK]"
     echo
     echo "Options:"
@@ -62,7 +68,11 @@ done
 
 # Interactive mode
 if [ "$INTERACTIVE" -eq 1 ]; then
-    echo "Interactive mode enabled."
+    echo " ___       _                      _   _             __  __           _      "
+    echo "|_ _|_ __ | |_ ___ _ __ __ _  ___| |_(_)_   _____  |  \/  | ___   __| | ___ "
+    echo " | || '_ \| __/ _ \ \`__/ _' |/ __| __| \ \ / / _ \ | |\/| |/ _ \ / _' |/ _ \ "
+    echo " | || | | | ||  __/ | | (_| | (__| |_| |\ V /  __/ | |  | | (_) | (_| |  __/"
+    echo "|___|_| |_|\__\___|_|  \__,_|\___|\__|_| \_/ \___| |_|  |_|\___/ \__,_|\___|"
 
     read -p "Enter search term (or press Enter to skip): " SEARCH_TERM
     read -p "Enter YouTube link (or press Enter to skip): " YT_LINK
