@@ -1,0 +1,218 @@
+#!/bin/bash
+
+# Directories
+WORK_DIR=~/Music/playmusic
+DOWNLOADS_DIR="$WORK_DIR/downloads"
+LINK_DIR="$WORK_DIR/link"
+META_DIR="$WORK_DIR/metadata"
+
+# Default values
+DOWNLOAD=0
+NO_PLAY=0
+QUALITY="bestaudio"
+VERBOSE=1  # Verbosity is on by default
+USE_LINK=0
+YT_LINK=""
+CLEAR=0
+REMOVE=0
+FORCE=0
+INTERACTIVE=0
+
+# Help message
+show_help() {
+    echo "Usage: $0 [OPTIONS] [SEARCH_TERM or --link YT_LINK]"
+    echo
+    echo "Options:"
+    echo "  -h, --help          Show this help message and exit"
+    echo "  -d, --download      Download the audio file"
+    echo "  -n, --no-play       Do not play the audio after fetching"
+    echo "  -q, --quality       Set audio quality to 'bestaudio' or 'worstaudio' (default: bestaudio)"
+    echo "  -v, --verbose       Toggle verbosity (default: on)"
+    echo "  -l, --link YT_LINK  Use a direct YouTube link instead of a search query"
+    echo "  -C, --clear         Clear all links, metadata, and downloaded files"
+    echo "  -R, --remove        Remove the audio file and associated metadata and link files"
+    echo "  -F, --force         Force action based on the context (see description)"
+    echo "  -I, --interactive   Run the script interactively"
+}
+
+# Verbose logging function
+log() {
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo "$@"
+    fi
+}
+
+# Parse arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -h|--help) show_help; exit 0 ;;
+        -d|--download) DOWNLOAD=1 ;;
+        -n|--no-play) NO_PLAY=1 ;;
+        -q|--quality) QUALITY="$2"; shift ;;
+        -v|--verbose) VERBOSE=0 ;;  # Toggle verbosity
+        -l|--link) USE_LINK=1; YT_LINK="$2"; shift ;;
+        -C|--clear) CLEAR=1 ;;
+        -R|--remove) REMOVE=1 ;;
+        -F|--force) FORCE=1 ;;
+        -I|--interactive) INTERACTIVE=1 ;;
+        *) SEARCH_TERM="$1" ;;
+    esac
+    shift
+done
+
+# Interactive mode
+if [ "$INTERACTIVE" -eq 1 ]; then
+    echo "Interactive mode enabled."
+
+    read -p "Enter search term (or press Enter to skip): " SEARCH_TERM
+    read -p "Enter YouTube link (or press Enter to skip): " YT_LINK
+    read -p "Download audio (1 for yes, 0 for no): " DOWNLOAD
+    read -p "Do not play audio after fetching (1 for yes, 0 for no): " NO_PLAY
+    read -p "Set audio quality ('bestaudio' or 'worstaudio'): " QUALITY
+    read -p "Force download even if the file exists (1 for yes, 0 for no): " FORCE
+    read -p "Clear all links, metadata, and downloaded files (1 for yes, 0 for no): " CLEAR
+    read -p "Remove audio file and associated metadata and link files (1 for yes, 0 for no): " REMOVE
+
+    if [ "$REMOVE" -eq 1 ] && [ -z "$SEARCH_TERM" ] && [ -z "$YT_LINK" ]; then
+        echo "Error: No search term or link provided for removal."
+        show_help
+        exit 1
+    fi
+else
+    if [ "$CLEAR" -eq 1 ] && [ "$REMOVE" -eq 1 ]; then
+        echo "Error: --clear and --remove cannot be used together."
+        show_help
+        exit 1
+    fi
+fi
+
+# Clear all files if the clear flag is set
+if [ "$CLEAR" -eq 1 ]; then
+    log "Clearing all links, metadata, and downloaded files..."
+    rm -rf "$DOWNLOADS_DIR"/*
+    rm -rf "$LINK_DIR"/*
+    rm -rf "$META_DIR"/*
+    log "All data cleared."
+    exit 0
+fi
+
+# Remove audio file and associated metadata and link files if the remove flag is set
+if [ "$REMOVE" -eq 1 ]; then
+    if [ -z "$SEARCH_TERM" ] && [ -z "$YT_LINK" ]; then
+        echo "Error: No search term or link provided for removal."
+        show_help
+        exit 1
+    fi
+
+    # Fetch metadata to determine file names
+    if [ "$USE_LINK" -eq 1 ]; then
+        METADATA=$(yt-dlp --dump-json "$YT_LINK")
+    else
+        METADATA=$(yt-dlp --dump-json "ytsearch1:$SEARCH_TERM")
+    fi
+
+    TITLE=$(echo "$METADATA" | jq -r '.title')
+    EXTENSION="opus"
+    [[ "$QUALITY" == "worstaudio" ]] && EXTENSION="mp3"
+    AUDIO_FILENAME="${TITLE}.${EXTENSION}"
+    LINK_FILE="$LINK_DIR/${TITLE}.link"
+    META_FILE="$META_DIR/${TITLE}.meta"
+
+    # Remove files if they exist
+    if [ -f "$DOWNLOADS_DIR/$AUDIO_FILENAME" ]; then
+        log "Removing audio file..."
+        rm "$DOWNLOADS_DIR/$AUDIO_FILENAME"
+    fi
+
+    if [ -f "$LINK_FILE" ]; then
+        log "Removing link file..."
+        rm "$LINK_FILE"
+    fi
+
+    if [ -f "$META_FILE" ]; then
+        log "Removing metadata file..."
+        rm "$META_FILE"
+    fi
+
+    log "Removal complete."
+    exit 0
+fi
+
+# Fetch metadata from yt-dlp
+if [ "$USE_LINK" -eq 1 ]; then
+    log "Fetching metadata for the provided link..."
+    METADATA=$(yt-dlp --dump-json "$YT_LINK")
+else
+    log "Fetching metadata for '$SEARCH_TERM'..."
+    METADATA=$(yt-dlp --dump-json "ytsearch1:$SEARCH_TERM")
+fi
+
+TITLE=$(echo "$METADATA" | jq -r '.title')
+URL=$(echo "$METADATA" | jq -r '.webpage_url')
+EXTENSION="opus"
+[[ "$QUALITY" == "worstaudio" ]] && EXTENSION="mp3"
+
+# Filename for the audio file
+AUDIO_FILENAME="${TITLE}.${EXTENSION}"
+LINK_FILE="$LINK_DIR/${TITLE}.link"
+META_FILE="$META_DIR/${TITLE}.meta"
+
+# Check if a .link file exists
+if [ -f "$LINK_FILE" ]; then
+    log "Link file found."
+
+    # Check if the audio file exists
+    if [ -f "$DOWNLOADS_DIR/$AUDIO_FILENAME" ]; then
+        if [ "$FORCE" -eq 0 ]; then
+            log "Local file found. Playing the local file..."
+            if [ "$NO_PLAY" -eq 0 ]; then
+                mpv "$DOWNLOADS_DIR/$AUDIO_FILENAME"
+            fi
+            exit 0
+        else
+            log "Force flag set, playing online stream..."
+            mpv "$URL" --no-video
+            exit 0
+        fi
+    else
+        log "Local file not found but link file exists. Playing audio online..."
+        mpv "$URL" --no-video
+        exit 0
+    fi
+fi
+
+# If no .link file is found or FORCE flag is set to download
+if [ "$DOWNLOAD" -eq 1 ] || [ "$FORCE" -eq 1 ]; then
+    log "Downloading audio..."
+
+    EXTRACTION_ARGS="--extract-audio --audio-format $EXTENSION"
+    if [ "$QUALITY" == "bestaudio" ]; then
+        EXTRACTION_ARGS="$EXTRACTION_ARGS --audio-quality 0"
+    else
+        EXTRACTION_ARGS="$EXTRACTION_ARGS --audio-quality 9"
+    fi
+
+    yt-dlp $EXTRACTION_ARGS --output "$DOWNLOADS_DIR/$AUDIO_FILENAME" "$URL"
+    if [ $? -ne 0 ]; then
+        echo "Error: Download failed."
+        exit 1
+    fi
+
+    DOWNLOADED="true"
+    log "Download complete. Playing the downloaded file..."
+    if [ "$NO_PLAY" -eq 0 ]; then
+        mpv "$DOWNLOADS_DIR/$AUDIO_FILENAME"
+    fi
+
+    # Create the .link file and save metadata
+    log "Creating link file..."
+    echo -e "file=$AUDIO_FILENAME\nmeta=${TITLE}.meta\ndownloaded=$DOWNLOADED" > "$LINK_FILE"
+    log "Saving metadata..."
+    echo "$METADATA" | jq -c '.' > "$META_FILE"
+else
+    # Play the audio online if not downloading
+    log "Streaming audio online..."
+    mpv "$URL" --no-video
+fi
+
+log "Operation completed."
